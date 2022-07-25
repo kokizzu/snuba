@@ -20,7 +20,7 @@ isort==5.8.0
 itsdangerous==0.24
 Jinja2==2.11.3
 jsonschema==3.0.1
-lz4==2.0.0
+lz4==4.0.2
 Markdown==2.6.11
 MarkupSafe==1.1.1
 mywsgi==1.0.3
