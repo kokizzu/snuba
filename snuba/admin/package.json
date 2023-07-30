@@ -30,7 +30,7 @@
   },
   "devDependencies": {
     "@emotion/react": "^11.11.1",
-    "@jest/globals": "^29.4.3",
+    "@jest/globals": "^29.6.2",
     "@mantine/core": "^6.0.15",
     "@mantine/hooks": "^6.0.15",
     "@mantine/prism": "^6.0.15",
