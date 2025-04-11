@@ -1,6 +1,6 @@
 from typing import Final, Mapping, Sequence, Set
 
-from sentry_protos.snuba.v1.request_common_pb2 import RequestMeta
+from sentry_protos.snuba.v1.request_common_pb2 import RequestMeta, TraceItemType
 from sentry_protos.snuba.v1.trace_item_attribute_pb2 import (
     AttributeKey,
     VirtualColumnContext,
@@ -109,7 +109,7 @@ def use_eap_items_table(request_meta: RequestMeta) -> bool:
     if request_meta.referrer.startswith("force_use_eap_spans_table"):
         return False
 
-    if settings.USE_EAP_ITEMS_TABLE:
+    if request_meta.trace_item_type == TraceItemType.TRACE_ITEM_TYPE_LOG:
         return True
 
     use_eap_items_orgs = state.get_str_config("use_eap_items_orgs")
@@ -130,12 +130,17 @@ def use_eap_items_table(request_meta: RequestMeta) -> bool:
     )
 
     use_eap_items_table_start_timestamp_seconds = state.get_int_config(
-        "use_eap_items_table_start_timestamp_seconds"
+        "use_eap_items_table_start_timestamp_seconds",
+        settings.USE_EAP_ITEMS_TABLE_START_TIMESTAMP_SECONDS,
+    )
+
+    assert use_eap_items_table_start_timestamp_seconds is not None
+    use_eap_items_table_start_timestamp_seconds = int(
+        use_eap_items_table_start_timestamp_seconds
     )
 
     if (
-        state.get_int_config("use_eap_items_table", 0)
-        and use_eap_items_table_start_timestamp_seconds is not None
+        state.get_int_config("use_eap_items_table", settings.USE_EAP_ITEMS_TABLE)
         and turned_on_for_org
     ):
         return (

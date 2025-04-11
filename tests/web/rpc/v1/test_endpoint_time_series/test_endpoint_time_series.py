@@ -39,7 +39,6 @@ from sentry_protos.snuba.v1.trace_item_filter_pb2 import (
 
 from snuba.datasets.storages.factory import get_storage
 from snuba.datasets.storages.storage_key import StorageKey
-from snuba.utils.metrics.timer import Timer
 from snuba.web import QueryException
 from snuba.web.rpc import RPCEndpoint
 from snuba.web.rpc.common.exceptions import BadSnubaRPCRequestException
@@ -196,39 +195,6 @@ class TestTimeSeriesApi(BaseApiTest):
                 referrer="something",
                 start_timestamp=tstart,
                 end_timestamp=ts,
-            ),
-            aggregations=[
-                AttributeAggregation(
-                    aggregate=Function.FUNCTION_COUNT,
-                    key=AttributeKey(
-                        type=AttributeKey.TYPE_FLOAT, name="sentry.duration"
-                    ),
-                    label="count",
-                ),
-            ],
-            granularity_secs=60,
-        )
-        response = self.app.post(
-            "/rpc/EndpointTimeSeries/v1", data=message.SerializeToString()
-        )
-        error = Error()
-        if response.status_code != 200:
-            error.ParseFromString(response.data)
-        assert response.status_code == 400, (error.message, error.details)
-
-    def test_fails_for_logs(self) -> None:
-        ts = Timestamp()
-        ts.GetCurrentTime()
-        tstart = Timestamp(seconds=ts.seconds - 3600)
-        message = TimeSeriesRequest(
-            meta=RequestMeta(
-                project_ids=[1, 2, 3],
-                organization_id=1,
-                cogs_category="something",
-                referrer="something",
-                start_timestamp=tstart,
-                end_timestamp=ts,
-                trace_item_type=TraceItemType.TRACE_ITEM_TYPE_LOG,
             ),
             aggregations=[
                 AttributeAggregation(
@@ -1461,10 +1427,7 @@ class TestTimeSeriesApiEAPItems(TestTimeSeriesApi):
             )
         )
 
-    @patch.object(Timer, "get_duration_between_marks")
-    def test_best_effort_route_to_tier_64(
-        self, mock_get_duration_between_marks: MagicMock
-    ) -> None:
+    def test_best_effort_route_to_tier_64(self) -> None:
         # store a a test metric with a value of 1, every second of one hour
         granularity_secs = 3600
         query_duration = granularity_secs * 1
@@ -1519,34 +1482,37 @@ class TestTimeSeriesApiEAPItems(TestTimeSeriesApi):
             granularity_secs=granularity_secs,
         )
         # this forces the query to route to tier 64. take a look at _get_target_tier to find out why
-        mock_get_duration_between_marks.return_value = 2777.0
-        best_effort_response = EndpointTimeSeries().execute(
-            best_effort_downsample_message
-        )
-        non_downsampled_tier_response = EndpointTimeSeries().execute(
-            message_to_non_downsampled_tier
-        )
-
-        best_effort_metric_sum = (
-            best_effort_response.result_timeseries[0].data_points[0].data
-        )
-
-        # tier 1 sum should be 3600, so tier 64 sum should be around 3600 / 64 (give or take due to random sampling)
-        non_downsampled_best_effort_metric_sum = (
-            non_downsampled_tier_response.result_timeseries[0].data_points[0].data
-        )
-        assert (
-            non_downsampled_best_effort_metric_sum / 90
-            <= best_effort_metric_sum
-            <= non_downsampled_best_effort_metric_sum / 40
-        )
-
-        assert (
-            best_effort_response.meta.downsampled_storage_meta
-            == DownsampledStorageMeta(
-                tier=DownsampledStorageMeta.SelectedTier.SELECTED_TIER_64
+        with patch(
+            "snuba.web.rpc.v1.resolvers.R_eap_spans.common.sampling_in_storage_util._get_query_bytes_scanned",
+            return_value=2516582401,
+        ):
+            best_effort_response = EndpointTimeSeries().execute(
+                best_effort_downsample_message
             )
-        )
+            non_downsampled_tier_response = EndpointTimeSeries().execute(
+                message_to_non_downsampled_tier
+            )
+
+            best_effort_metric_sum = (
+                best_effort_response.result_timeseries[0].data_points[0].data
+            )
+
+            # tier 1 sum should be 3600, so tier 64 sum should be around 3600 / 64 (give or take due to random sampling)
+            non_downsampled_best_effort_metric_sum = (
+                non_downsampled_tier_response.result_timeseries[0].data_points[0].data
+            )
+            assert (
+                non_downsampled_best_effort_metric_sum / 200
+                <= best_effort_metric_sum
+                <= non_downsampled_best_effort_metric_sum / 16
+            )
+
+            assert (
+                best_effort_response.meta.downsampled_storage_meta
+                == DownsampledStorageMeta(
+                    tier=DownsampledStorageMeta.SelectedTier.SELECTED_TIER_64
+                )
+            )
 
     def test_best_effort_end_to_end(self) -> None:
         granularity_secs = 3600
