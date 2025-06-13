@@ -111,7 +111,8 @@ class EndpointTimeSeries(RPCEndpoint[TimeSeriesRequest, TimeSeriesResponse]):
         self, trace_item_type: TraceItemType.ValueType
     ) -> TraceItemDataResolver[TimeSeriesRequest, TimeSeriesResponse]:
         return ResolverTimeSeries.get_from_trace_item_type(trace_item_type)(
-            timer=self._timer, metrics_backend=self._metrics_backend
+            timer=self._timer,
+            metrics_backend=self._metrics_backend,
         )
 
     def _execute(self, in_msg: TimeSeriesRequest) -> TimeSeriesResponse:
@@ -134,4 +135,4 @@ class EndpointTimeSeries(RPCEndpoint[TimeSeriesRequest, TimeSeriesResponse]):
         in_msg_wrapper.accept(aggregation_to_conditional_aggregation_visitor)
         preprocess_expression_labels(in_msg)
         resolver = self.get_resolver(in_msg.meta.trace_item_type)
-        return resolver.resolve(in_msg)
+        return resolver.resolve(in_msg, self.routing_decision)
