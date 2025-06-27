@@ -31,7 +31,7 @@ from snuba.web.query import run_query
 from snuba.web.rpc import RPCEndpoint
 from snuba.web.rpc.common.common import base_conditions_and, treeify_or_and_conditions
 from snuba.web.rpc.common.exceptions import BadSnubaRPCRequestException
-from snuba.web.rpc.v1.resolvers.R_eap_spans.common.common import (
+from snuba.web.rpc.v1.resolvers.R_eap_items.common.common import (
     attribute_key_to_expression_eap_items,
 )
 
@@ -115,9 +115,9 @@ def _build_query(
             OrderBy(direction=OrderByDirection.ASC, expression=column("attr_value")),
         ],
         limit=request.limit,
-        offset=request.page_token.offset
-        if request.page_token.HasField("offset")
-        else 0,
+        offset=(
+            request.page_token.offset if request.page_token.HasField("offset") else 0
+        ),
     )
     return res
 
@@ -162,13 +162,14 @@ class AttributeValuesRequest(
     def _execute(
         self, in_msg: TraceItemAttributeValuesRequest
     ) -> TraceItemAttributeValuesResponse:
-        in_msg.limit = in_msg.limit or 1000
-        # HACK (Volo): for backwards compatibility. eap_spans used to store this value,
-        # eap_items does not
-        if in_msg.key == "sentry.service":
+        # if for some reason the item_id is the key, we can just return the value
+        # item ids are unique
+        if in_msg.key.name == "sentry.item_id" and in_msg.value_substring_match:
             return TraceItemAttributeValuesResponse(
-                values=[str(p) for p in in_msg.meta.project_ids],
+                values=[in_msg.value_substring_match],
+                page_token=None,
             )
+        in_msg.limit = in_msg.limit or 1000
         snuba_request = _build_snuba_request(in_msg)
         res = run_query(
             dataset=PluggableDataset(name="eap", all_entities=[]),
