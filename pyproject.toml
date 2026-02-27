@@ -64,7 +64,7 @@ url = "https://pypi.devinfra.sentry.io/simple"
 default = true
 
 [build-system]
-requires = ["uv_build==0.8.2"]
+requires = ["uv_build"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
@@ -87,7 +87,7 @@ dev = [
     "pytest-cov>=4.1.0",
     "pytest-watch>=4.2.0",
     "ruff>=0.14.0",
-    "sentry-devenv>=1.22.2",
+    "sentry-devenv>=1.28.0",
     "time-machine>=2.13.0",
     "types-google-cloud-ndb>=2.2.0",
     "types-protobuf>=5.27.0.20240626",
