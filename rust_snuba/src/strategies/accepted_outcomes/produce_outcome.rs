@@ -1,5 +1,5 @@
 use crate::types::{AggregatedOutcomesBatch, TrackOutcome};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SecondsFormat, Utc};
 use sentry_arroyo::backends::kafka::types::KafkaPayload;
 use sentry_arroyo::backends::Producer;
 use sentry_arroyo::counter;
@@ -57,9 +57,10 @@ impl TaskRunner<AggregatedOutcomesBatch, AggregatedOutcomesBatch, anyhow::Error>
                 let ts_secs = key.time_offset * bucket_interval;
                 let timestamp =
                     DateTime::from_timestamp(ts_secs as i64, 0).unwrap_or_else(Utc::now);
-
+                // convert to string with fractional seconds e.g.  "2019-09-29T09:46:40.000000Z"
+                let timestamp_str = timestamp.to_rfc3339_opts(SecondsFormat::Micros, true);
                 let outcome = TrackOutcome {
-                    timestamp,
+                    timestamp: timestamp_str,
                     org_id: key.org_id,
                     project_id: key.project_id,
                     key_id: key.key_id,
@@ -280,5 +281,14 @@ mod tests {
 
         let produced = produced_payloads.lock().unwrap();
         assert_eq!(produced.len(), 0);
+    }
+
+    #[test]
+    fn test_timestamp_formatting() {
+        let timestamp = DateTime::from_timestamp(1_700_000_000, 0).expect("expect timestamp");
+        assert_eq!(
+            timestamp.to_rfc3339_opts(SecondsFormat::Micros, true),
+            "2023-11-14T22:13:20.000000Z"
+        );
     }
 }
