@@ -90,6 +90,7 @@ pub fn process_message_with_replacement(
 
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
 enum Message {
     FourTrain(FourTrain),
     ThreeTrain(ThreeTrain),
@@ -548,7 +549,7 @@ impl ErrorRow {
             for (key, value) in container.unwrap_or_default() {
                 if let Some(v) = value.0 {
                     if key != "type" {
-                        contexts_keys.push(format!("{}.{}", container_name, key));
+                        contexts_keys.push(format!("{container_name}.{key}"));
                         contexts_values.push(v);
                     }
                 }
