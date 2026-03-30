@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 
 use prost::Message as ProstMessage;
 use sentry_arroyo::backends::kafka::types::KafkaPayload;
+use sentry_arroyo::counter;
 use sentry_arroyo::processing::strategies::{
     merge_commit_request, CommitRequest, InvalidMessage, MessageRejected, ProcessingStrategy,
     StrategyError, SubmitError,
@@ -101,19 +102,21 @@ impl<TNext> OutcomesAggregator<TNext> {
             .map(|(partition, offset)| (*partition, offset + 1))
             .collect();
 
+        let category_metrics = batch.category_metrics.clone();
         let message = Message::new_any_message(batch, committable);
-
         match self.next_step.submit(message) {
             Ok(()) => {
                 let now = Instant::now();
                 let seconds = (now - self.last_flush).as_secs_f64();
-                tracing::info!(
-                    "flushed {} buckets after {} seconds, with committable {:?}",
-                    num_buckets,
-                    seconds,
-                    latest_offsets
-                );
                 self.last_flush = now;
+
+                tracing::info!("flushed {} buckets after {} seconds", num_buckets, seconds);
+                for (category, m) in category_metrics {
+                    let cat_str = category.to_string();
+                    counter!("accepted_outcomes.messages_seen", m.messages_seen, "data_category" => cat_str.as_str());
+                    counter!("accepted_outcomes.total_quantity", m.total_quantity, "data_category" => cat_str.as_str());
+                    counter!("accepted_outcomes.bucket_count", m.bucket_count, "data_category" => cat_str.as_str());
+                }
                 Ok(())
             }
             Err(SubmitError::MessageRejected(rejected)) => {
@@ -139,6 +142,7 @@ impl<TNext: ProcessingStrategy<AggregatedOutcomesBatch>> ProcessingStrategy<Kafk
                 Err(SubmitError::MessageRejected(MessageRejected {
                     message: carried_message,
                 })) => {
+                    counter!("accepted_outcomes.got_backpressure", 1, "strategy_name" => "outcomes_aggregator");
                     self.message_carried_over = Some(carried_message);
                 }
                 Err(SubmitError::InvalidMessage(e)) => {
