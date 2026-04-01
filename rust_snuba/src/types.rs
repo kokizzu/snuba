@@ -8,6 +8,12 @@ use sentry_arroyo::timer;
 use sentry_protos::snuba::v1::TraceItemType;
 use serde::{Deserialize, Serialize};
 
+/// Trait for row types that can estimate their in-memory byte size.
+/// Used by byte-based batch size calculation in the Reduce step.
+pub trait EstimatedSize {
+    fn estimated_size(&self) -> usize;
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CommitLogEntry {
     pub offset: u64,
@@ -255,6 +261,9 @@ pub struct BytesInsertBatch<R> {
     cogs_data: CogsData,
 
     item_type_metrics: ItemTypeMetrics,
+
+    /// Total encoded byte size of the batch, used for byte-based batch size limiting
+    num_bytes: usize,
 }
 
 impl<R> BytesInsertBatch<R> {
@@ -282,6 +291,7 @@ impl<R> BytesInsertBatch<R> {
             commit_log_offsets,
             cogs_data,
             item_type_metrics: Default::default(),
+            num_bytes: 0,
         }
     }
 
@@ -303,6 +313,7 @@ impl<R> BytesInsertBatch<R> {
             commit_log_offsets: Default::default(),
             cogs_data: Default::default(),
             item_type_metrics: Default::default(),
+            num_bytes: 0,
         }
     }
 
@@ -342,6 +353,17 @@ impl<R> BytesInsertBatch<R> {
         self
     }
 
+    /// Set the total encoded byte size of the batch
+    pub fn with_num_bytes(mut self, num_bytes: usize) -> Self {
+        self.num_bytes = num_bytes;
+        self
+    }
+
+    /// Get the total encoded byte size of the batch
+    pub fn num_bytes(&self) -> usize {
+        self.num_bytes
+    }
+
     pub fn commit_log_offsets(&self) -> &CommitLogOffsets {
         &self.commit_log_offsets
     }
@@ -359,6 +381,7 @@ impl<R> BytesInsertBatch<R> {
             commit_log_offsets: self.commit_log_offsets.clone(),
             cogs_data: self.cogs_data.clone(),
             item_type_metrics: self.item_type_metrics.clone(),
+            num_bytes: self.num_bytes,
         }
     }
 
@@ -371,6 +394,7 @@ impl<R> BytesInsertBatch<R> {
             commit_log_offsets: self.commit_log_offsets,
             cogs_data: self.cogs_data,
             item_type_metrics: self.item_type_metrics,
+            num_bytes: self.num_bytes,
         };
 
         (self.rows, new)
@@ -415,6 +439,7 @@ impl BytesInsertBatch<RowData> {
     pub fn merge(mut self, other: BytesInsertBatch<RowData>) -> Self {
         self.rows.encoded_rows.extend(other.rows.encoded_rows);
         self.rows.num_rows += other.rows.num_rows;
+        self.num_bytes += other.num_bytes;
         self.commit_log_offsets.merge(other.commit_log_offsets);
         self.message_timestamp.merge(other.message_timestamp);
         self.origin_timestamp.merge(other.origin_timestamp);
@@ -433,6 +458,7 @@ impl<T> BytesInsertBatch<Vec<T>> {
 
     pub fn merge(mut self, other: Self) -> Self {
         self.rows.extend(other.rows);
+        self.num_bytes += other.num_bytes;
         self.commit_log_offsets.merge(other.commit_log_offsets);
         self.message_timestamp.merge(other.message_timestamp);
         self.origin_timestamp.merge(other.origin_timestamp);

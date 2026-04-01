@@ -102,6 +102,7 @@ pub fn consumer_impl(
     let consumer_config = config::ConsumerConfig::load_from_str(consumer_config_raw).unwrap();
     let max_batch_size = consumer_config.max_batch_size;
     let max_batch_time = Duration::from_millis(consumer_config.max_batch_time_ms);
+    let max_batch_size_calculation = consumer_config.max_batch_size_calculation;
 
     let batch_write_timeout = match batch_write_timeout_ms {
         Some(timeout_ms) => {
@@ -255,6 +256,7 @@ pub fn consumer_impl(
         logical_topic_name,
         max_batch_size,
         max_batch_time,
+        max_batch_size_calculation,
         processing_concurrency: ConcurrencyConfig::new(concurrency),
         clickhouse_concurrency: ConcurrencyConfig::new(clickhouse_concurrency),
         commitlog_concurrency: ConcurrencyConfig::new(2),
