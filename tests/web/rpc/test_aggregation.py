@@ -11,7 +11,7 @@ from sentry_protos.snuba.v1.trace_item_attribute_pb2 import (
     Reliability,
 )
 
-from snuba.query.expressions import Column, FunctionCall, Literal, SubscriptableReference
+from snuba.query.expressions import Column, FunctionCall, JsonPath, Literal, SubscriptableReference
 from snuba.web.rpc.common.common import (
     attribute_key_to_expression,
     get_field_existence_expression,
@@ -254,14 +254,11 @@ def test_attribute_key_to_expression_type_array() -> None:
     attr_key = AttributeKey(type=AttributeKey.TYPE_ARRAY, name="user_ids")
     expr = attribute_key_to_expression(attr_key)
     assert isinstance(expr, FunctionCall)
-    assert expr.function_name == "arrayMap"
+    assert expr.function_name == "toJSONString"
     assert expr.alias == "user_ids_TYPE_ARRAY"
     fmt = ClickhouseExpressionFormatter()
     sql = expr.accept(fmt)
-    assert (
-        sql
-        == "(arrayMap(x -> coalesce(x.`String`::Nullable(String), toString(x.`Int`::Nullable(Int64)), toString(x.`Double`::Nullable(Float64)), x.`Bool`::Nullable(String)), attributes_array.`user_ids`::Array(JSON)) AS user_ids_TYPE_ARRAY)"
-    )
+    assert sql == "(toJSONString(attributes_array.`user_ids`::Array(JSON)) AS user_ids_TYPE_ARRAY)"
 
 
 def test_get_field_existence_expression_array_map() -> None:
@@ -315,6 +312,11 @@ def test_aggregation_to_expression_uniq_type_array() -> None:
     inner = expr.parameters[0]
     assert isinstance(inner, FunctionCall)
     assert inner.function_name == "uniqArrayIfOrNull"
+    # Must be the stored Array(JSON) path, not toJSONString (String) from attribute_key_to_expression
+    first = inner.parameters[0]
+    assert isinstance(first, JsonPath)
+    assert first.path == "user_ids"
+    assert first.return_type == "Array(JSON)"
 
 
 def test_aggregation_to_expression_sum_type_array_raises() -> None:
